@@ -161,6 +161,19 @@ const result = await push(project, { onProgress: (ev) => console.log(ev) });
 
 `push` / `pull` / `verify` / `status` には `provider` オプションで独自のストレージ実装（`blobExists` / `uploadBlob` / `downloadBlob` / `testConnection` を持つオブジェクト）を渡せます。
 
+## 他のツールから呼ぶ（`--json`）
+
+UniLFS の Unity パッケージはこのインターフェース経由で mylfs を呼んでいます。
+
+| オプション | 内容 |
+|---|---|
+| `--json` | stdout に結果の JSON を 1 つだけ出す。失敗時は `{"error": {"kind": "config\|busy\|cancelled\|error", "message"}}` |
+| `--progress-json` | stderr に進捗イベントを 1 行 1 JSON で出す（`phase` は全体の中での `start`/`span` を持つ） |
+| `--cancel-on-stdin` | stdin に `cancel` 行が来たら安全に中断（完了分はマニフェストに記録） |
+| `--paths-file <file>` | パスを 1 行 1 つでファイルから読む（相対パスはプロジェクトルート基準） |
+
+`--json` 専用コマンド: `patterns`（パターン数とエラー）、`refresh-ignore`、`drive-create-folder [name]`、`version`。`track --matching <paths>` は渡したパスのうち `unilfs.track` に一致するものだけをステージします。
+
 ## 制限
 
 - ファイルロック無し（git と同様、共有バイナリの編集は調整してください）

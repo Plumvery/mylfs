@@ -37,13 +37,21 @@ Setup
   hooks uninstall | hooks status
 
 Daily use
-  track [paths...]               Stage files (or folders) for storage; no paths = everything unilfs.track matches
+  track [paths...] [--matching]  Stage files (or folders) for storage; no paths = everything unilfs.track matches
+                                 (--matching: of the given paths, only those unilfs.track matches)
   untrack <paths...>             Stop tracking (files stay on disk)
   push [--require-baseline]      Upload new/changed files, then record them in the manifest
   pull [--restore-modified]      Download missing/outdated files
-  status [--verify] [--json]     State of every tracked file (--verify asks storage too)
+  status [--verify]              State of every tracked file (--verify asks storage too)
   verify                         Fail when the manifest names blobs storage does not have
   keep-mine <paths...>           Resolve a conflict in favour of your copy (uploaded by the next push)
+
+Machine interface (for tools such as the UniLFS Unity package):
+  --json            one JSON result object on stdout ({"error": {kind, message}} on failure)
+  --progress-json   JSON progress events, one per line, on stderr
+  --cancel-on-stdin a line "cancel" on stdin cancels gracefully
+  --paths-file <f>  read paths (one per line) instead of arguments
+  extra commands: patterns, refresh-ignore, drive-create-folder [name], version
 
 Credentials can also come from environment variables (CI):
   UNILFS_S3_ACCESS_KEY_ID, UNILFS_S3_SECRET_ACCESS_KEY,
@@ -64,7 +72,7 @@ const STATE_LABEL = {
 function parseArgs(argv) {
   const opts = {};
   const positional = [];
-  const valued = new Set(['root', 'provider', 'endpoint', 'bucket', 'region', 'prefix', 'folder-id', 'client-id', 'client-secret', 'local-path']);
+  const valued = new Set(['root', 'provider', 'endpoint', 'bucket', 'region', 'prefix', 'folder-id', 'client-id', 'client-secret', 'local-path', 'paths-file']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--') {
@@ -323,12 +331,8 @@ async function cmdLogout(project) {
 }
 
 async function cmdStatus(project, opts, signal) {
-  const report = await core.status(project, { verifyRemote: !!opts.verify, onProgress: opts.json ? undefined : makeProgress(opts.quiet), signal });
+  const report = await core.status(project, { verifyRemote: !!opts.verify, onProgress: makeProgress(opts.quiet), signal });
   finishProgress();
-  if (opts.json) {
-    out(JSON.stringify(report, null, 2));
-    return 0;
-  }
   if (report.files.length === 0) {
     out('mylfs: no tracked files.');
     return 0;
@@ -366,8 +370,8 @@ function pathsInGitIndex(project, paths) {
 
 async function cmdTrack(project, args, opts, signal) {
   const progress = makeProgress(opts.quiet);
-  const result = args.length === 0
-    ? await core.trackMatching(project, { onProgress: progress, signal })
+  const result = args.length === 0 || opts.matching
+    ? await core.trackMatching(project, { paths: args.length ? expandPaths(project, args) : undefined, onProgress: progress, signal })
     : await core.track(project, expandPaths(project, args), { onProgress: progress, signal });
   finishProgress();
   if (args.length === 0 && TrackPatterns.load(project.trackPath).isEmpty) {
@@ -430,9 +434,153 @@ async function runHook(project, name, args, signal) {
   return 0;
 }
 
+// ------------------------------------------------------- machine interface
+//
+// `--json` is the interface other tools (the UniLFS Unity package) drive
+// mylfs through: one JSON object on stdout per run - the operation's result,
+// or { "error": { "kind", "message" } } - and nothing else there.
+// `--progress-json` adds one JSON event per line on stderr, and
+// `--cancel-on-stdin` cancels gracefully (finishing what is done, saving the
+// manifest) when a line "cancel" arrives on stdin.
+
+function readPathsFile(file) {
+  return fs.readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
+/** Relative paths are project-relative here, unlike the human CLI's (relative to the shell's directory). */
+function machinePaths(project, args, opts) {
+  const list = opts['paths-file'] ? readPathsFile(opts['paths-file']) : args;
+  return list.map((a) => path.resolve(project.root, a));
+}
+
+function errorKind(e) {
+  if (isAbort(e)) return 'cancelled';
+  if (e && e.code === 'UNILFS_BUSY') return 'busy';
+  if (e && (e.name === 'ConfigError' || e.code === 'UNILFS_NO_PROJECT')) return 'config';
+  return 'error';
+}
+
+/** Status entries with no nulls, so strict deserializers (Unity's JsonUtility) read them. */
+function machineStatus(report) {
+  return {
+    ...report,
+    files: report.files.map((f) => ({
+      path: f.path,
+      hash: f.hash || '',
+      size: f.size || 0,
+      guid: f.guid || '',
+      state: f.state,
+      currentHash: f.currentHash || '',
+      currentSize: f.currentSize || 0,
+      remoteKnown: !!f.remoteKnown,
+      baselineKnown: !!f.baselineKnown,
+      needsDownload: !!f.needsDownload,
+    })),
+  };
+}
+
+async function runMachine(command, args, opts, signal) {
+  const onProgress = opts['progress-json']
+    ? (ev) => process.stderr.write(JSON.stringify(ev) + '\n')
+    : undefined;
+  if (command === 'version') return { version: VERSION };
+  const project = resolveProject(opts);
+  switch (command) {
+    case 'status':
+      return machineStatus(await core.status(project, { verifyRemote: !!opts.verify, onProgress, signal }));
+    case 'track':
+      if (opts.matching) {
+        const paths = opts['paths-file'] || args.length ? machinePaths(project, args, opts) : undefined;
+        return core.trackMatching(project, { paths, onProgress, signal });
+      }
+      return core.track(project, machinePaths(project, args, opts), { onProgress, signal });
+    case 'untrack':
+      return core.untrack(project, machinePaths(project, args, opts));
+    case 'keep-mine':
+      return core.keepLocal(project, machinePaths(project, args, opts));
+    case 'push':
+      return core.push(project, { requireBaseline: !!opts['require-baseline'], onProgress, signal });
+    case 'pull':
+      return core.pull(project, { restoreModified: !!opts['restore-modified'], onProgress, signal });
+    case 'verify':
+      return core.verify(project, { onProgress, signal });
+    case 'test': {
+      const missing = missingRequirements(project);
+      if (missing.length) {
+        const e = new Error(`This provider still needs ${missing.join(', ')}.`);
+        e.name = 'ConfigError';
+        throw e;
+      }
+      return { message: await core.testConnection(project, { signal }) };
+    }
+    case 'patterns': {
+      const p = TrackPatterns.load(project.trackPath);
+      return { exists: fs.existsSync(project.trackPath), count: p.rules.length, errors: p.errors };
+    }
+    case 'refresh-ignore':
+      updateGitIgnore(project, Manifest.load(project.manifestPath).files.map((f) => f.path));
+      return { ok: true };
+    case 'login': {
+      if (project.settings.provider !== PROVIDER_DRIVE) {
+        const e = new Error('Only Google Drive signs in through a browser; S3 keys are entered directly.');
+        e.name = 'ConfigError';
+        throw e;
+      }
+      const c = project.credentials();
+      const tokens = await signIn(c.driveClientId, c.driveClientSecret, {
+        log: () => {},
+        onUrl: (url) => process.stderr.write(JSON.stringify({ type: 'auth-url', url }) + '\n'),
+        open: !opts['no-browser'],
+        signal,
+      });
+      const creds = project.loadCredentials();
+      creds.driveRefreshToken = tokens.refreshToken || '';
+      creds.driveAccountEmail = tokens.accountEmail || '';
+      project.saveCredentials(creds);
+      updateGitIgnore(project, Manifest.load(project.manifestPath).files.map((f) => f.path));
+      return { accountEmail: tokens.accountEmail || '' };
+    }
+    case 'drive-create-folder': {
+      const c = project.credentials();
+      const name = args[0] || 'UniLFS';
+      return { id: await GoogleDriveProvider.createFolder(c.driveClientId, c.driveClientSecret, c.driveRefreshToken, name), name };
+    }
+    default: {
+      const e = new Error(`Unknown command "${command}" for --json.`);
+      e.name = 'ConfigError';
+      throw e;
+    }
+  }
+}
+
+async function mainJson(command, args, opts) {
+  const controller = new AbortController();
+  if (opts['cancel-on-stdin']) {
+    let buffered = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      buffered += chunk;
+      if (/(^|\n)cancel\r?\n/.test(buffered)) controller.abort();
+    });
+    process.stdin.on('error', () => {});
+  }
+  process.on('SIGINT', () => controller.abort());
+  let payload;
+  try {
+    payload = await runMachine(command, args, opts, controller.signal);
+  } catch (e) {
+    payload = { error: { kind: errorKind(e), message: e && e.message ? e.message : String(e) } };
+  }
+  const code = payload && payload.error ? 1 : 0;
+  // Exit explicitly: a stdin listener would otherwise keep the process alive.
+  process.stdout.write(JSON.stringify(payload) + '\n', () => process.exit(code));
+  return new Promise(() => {});
+}
+
 async function main(argv) {
   const { opts, positional } = parseArgs(argv);
   const [command, ...args] = positional;
+  if (opts.json && command) return mainJson(command, args, opts);
   if (opts.version) {
     out(VERSION);
     return 0;

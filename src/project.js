@@ -218,6 +218,11 @@ export function findProject(startDir = process.cwd()) {
 
 export function openProject(root) {
   const abs = path.resolve(root);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
+    const e = new Error(`Project directory not found: ${abs}`);
+    e.code = 'UNILFS_NO_PROJECT';
+    throw e;
+  }
   return new Project(abs, detectMode(abs));
 }
 

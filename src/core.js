@@ -51,43 +51,60 @@ function newResult() {
     outdated: [],
     conflicted: [],
     unattributed: [],
+    notTracked: [],
     errors: [],
   };
 }
 
-/** Emits { type: 'phase' | 'start' | 'bytes' | 'done', ... } to an optional callback. */
+/**
+ * Emits { type: 'phase' | 'start' | 'bytes' | 'done', ... } to an optional
+ * callback. A phase carries the slice of the whole operation it covers
+ * (start, span in 0..1), so a progress bar can run 0..100% exactly once
+ * across phases; items carry an id, since parallel transfers interleave.
+ */
 class Reporter {
   constructor(onProgress) {
     this.cb = typeof onProgress === 'function' ? onProgress : null;
     this.phaseName = '';
     this.done = 0;
     this.total = 0;
+    this.nextId = 0;
   }
 
-  phase(name, total, totalBytes = 0) {
+  phase(name, total, totalBytes = 0, start = 0, span = 1) {
     this.phaseName = name;
     this.done = 0;
     this.total = total;
-    if (this.cb) this.cb({ type: 'phase', phase: name, total, totalBytes });
+    if (this.cb) this.cb({ type: 'phase', phase: name, total, totalBytes, start, span });
   }
 
   item(p, size = 0) {
     const phase = this.phaseName;
-    if (this.cb) this.cb({ type: 'start', phase, path: p, size });
+    const id = ++this.nextId;
+    if (this.cb) this.cb({ type: 'start', phase, id, path: p, size });
     let finished = false;
     return {
       bytes: (n) => {
-        if (this.cb) this.cb({ type: 'bytes', phase, path: p, bytes: n, size });
+        if (this.cb) this.cb({ type: 'bytes', phase, id, path: p, bytes: n, size });
       },
       done: () => {
         if (finished) return;
         finished = true;
         this.done++;
-        if (this.cb) this.cb({ type: 'done', phase, path: p, done: this.done, total: this.total });
+        if (this.cb) this.cb({ type: 'done', phase, id, path: p, done: this.done, total: this.total });
       },
     };
   }
 }
+
+// Each operation's progress slices, matching the Unity package's.
+const PUSH_HASH = [0, 0.25];
+const PUSH_CHECK = [0.25, 0.10];
+const PUSH_UPLOAD = [0.35, 0.65];
+const PULL_STATUS = [0, 0.20];
+const PULL_DOWNLOAD = [0.20, 0.80];
+const STATUS_VERIFY = [0, 0.40];
+const STATUS_AFTER_VERIFY = [0.40, 0.60];
 
 function openState(project) {
   return {
@@ -144,7 +161,7 @@ export async function status(project, { verifyRemote = false, onProgress, signal
       if (verifyRemote && manifest.files.length > 0) {
         const byHash = pathsByHash(manifest);
         try {
-          const check = await checkRemote(project, byHash, remote, reporter, signal, provider);
+          const check = await checkRemote(project, byHash, remote, reporter, signal, provider, STATUS_VERIFY);
           report.verified = true;
           report.confirmed = check.present.length;
           for (const h of check.missing) report.missingRemote.push(...byHash.get(h));
@@ -155,7 +172,8 @@ export async function status(project, { verifyRemote = false, onProgress, signal
           report.failures.push(e.message);
         }
       }
-      report.files = await statusInternal(project, manifest, staged, cache, remote, reporter, signal);
+      report.files = await statusInternal(project, manifest, staged, cache, remote, reporter, signal,
+        report.verified || report.failures.length ? STATUS_AFTER_VERIFY : [0, 1]);
       report.notIgnored = stagedPathsNothingIgnores(project, staged.paths);
       return report;
     } finally {
@@ -166,9 +184,9 @@ export async function status(project, { verifyRemote = false, onProgress, signal
   });
 }
 
-async function statusInternal(project, manifest, staged, cache, remote, reporter, signal) {
+async function statusInternal(project, manifest, staged, cache, remote, reporter, signal, slice = [0, 1]) {
   const stagedOnly = staged.paths.filter((p) => !manifest.find(p));
-  reporter.phase('Checking files', manifest.files.length + stagedOnly.length, totalSize(manifest.files));
+  reporter.phase('Checking files', manifest.files.length + stagedOnly.length, totalSize(manifest.files), ...slice);
   const result = [];
   for (const f of manifest.files) {
     throwIfAborted(signal);
@@ -302,11 +320,13 @@ async function trackUnlocked(project, paths, onProgress, signal) {
 
 /**
  * Stages every project file unilfs.track matches that is not tracked yet.
+ * With `paths`, only those are considered (what Unity's Auto Track hands
+ * over after an import); non-matching ones are skipped silently.
  */
-export async function trackMatching(project, { onProgress, signal } = {}) {
+export async function trackMatching(project, { paths, onProgress, signal } = {}) {
   return withLock(project, 'Track', async () => {
     const patterns = TrackPatterns.load(project.trackPath);
-    const { matches, alreadyTracked } = findPatternMatches(project, patterns);
+    const { matches, alreadyTracked } = findPatternMatches(project, patterns, paths);
     const result = await trackUnlocked(project, matches, onProgress, signal);
     result.skipped += alreadyTracked;
     for (const e of patterns.errors) result.errors.push(`unilfs.track, ${e}`);
@@ -314,14 +334,17 @@ export async function trackMatching(project, { onProgress, signal } = {}) {
   });
 }
 
-export function findPatternMatches(project, patterns) {
+export function findPatternMatches(project, patterns, only) {
   const out = { matches: [], alreadyTracked: 0 };
   if (!patterns || patterns.isEmpty) return out;
   const manifest = Manifest.load(project.manifestPath);
   const staged = StagedPaths.load(project.stagedPath);
   const tracked = new Set([...manifest.files.map((f) => f.path.toLowerCase()), ...staged.paths.map((p) => p.toLowerCase())]);
   const gate = (rel) => project.untrackableReason(rel);
-  for (const rel of enumerateProjectFiles(project)) {
+  const candidates = only
+    ? [...new Set(only.map((p) => project.toRel(p)).filter((rel) => rel && fileInfo(project.abs(rel)).exists))]
+    : enumerateProjectFiles(project);
+  for (const rel of candidates) {
     if (!patterns.matches(rel, gate)) continue;
     if (tracked.has(rel.toLowerCase())) out.alreadyTracked++;
     else out.matches.push(rel);
@@ -373,7 +396,7 @@ export async function untrack(project, paths) {
         clearPlaceholder(project.abs(rel));
         result.untracked++;
       } else {
-        result.errors.push(`${rel}: not tracked`);
+        result.notTracked.push(rel);
       }
     }
     manifest.save(project.manifestPath);
@@ -439,7 +462,7 @@ async function pushUnlocked(project, requireBaseline, onProgress, signal, provid
   const limit = parallelism(project);
 
   try {
-    reporter.phase('Hashing', candidates.length, totalSize(manifest.files));
+    reporter.phase('Hashing', candidates.length, totalSize(manifest.files), ...PUSH_HASH);
     for (const c of candidates) {
       throwIfAborted(signal);
       const abs = project.abs(c.path);
@@ -494,7 +517,7 @@ async function pushUnlocked(project, requireBaseline, onProgress, signal, provid
       else toCheck.push(h);
     }
 
-    reporter.phase('Checking remote', toCheck.length);
+    reporter.phase('Checking remote', toCheck.length, 0, ...PUSH_CHECK);
     await pool(toCheck, limit, async (h) => {
       const item = reporter.item(sourceByHash.get(h));
       try {
@@ -510,7 +533,7 @@ async function pushUnlocked(project, requireBaseline, onProgress, signal, provid
 
     const toUpload = hashes.filter((h) => !present.has(h) && !checkFailed.has(h));
     const uploadBytes = toUpload.reduce((n, h) => n + current.get(sourceByHash.get(h)).size, 0);
-    reporter.phase('Uploading', toUpload.length, uploadBytes);
+    reporter.phase('Uploading', toUpload.length, uploadBytes, ...PUSH_UPLOAD);
     await pool(toUpload, limit, async (h) => {
       const rel = sourceByHash.get(h);
       const item = reporter.item(rel, current.get(rel).size);
@@ -582,7 +605,7 @@ async function pullUnlocked(project, restoreModified, onProgress, signal, provid
   const remote = RemoteBlobCache.forProject(project);
   const reporter = new Reporter(onProgress);
   try {
-    const statuses = await statusInternal(project, manifest, staged, cache, remote, reporter, signal);
+    const statuses = await statusInternal(project, manifest, staged, cache, remote, reporter, signal, PULL_STATUS);
     const targets = statuses.filter((s) => s.needsDownload
       || (restoreModified && !!s.hash && (s.state === State.Modified || s.state === State.Conflicted)));
     for (const s of statuses) {
@@ -600,7 +623,7 @@ async function pullUnlocked(project, restoreModified, onProgress, signal, provid
       groups.get(t.hash).push(t);
     }
     const groupList = [...groups.entries()];
-    reporter.phase('Downloading', groupList.length, groupList.reduce((n, [, g]) => n + g[0].size, 0));
+    reporter.phase('Downloading', groupList.length, groupList.reduce((n, [, g]) => n + g[0].size, 0), ...PULL_DOWNLOAD);
     await pool(groupList, parallelism(project), async ([hash, group]) => {
       const tmpBlob = `${project.tmpDir}/${hash}.blob`;
       const first = group[0];
@@ -660,7 +683,7 @@ export async function verify(project, { onProgress, signal, provider, manifests 
     const byHash = pathsByHash(manifest);
     const remote = RemoteBlobCache.forProject(project);
     try {
-      const check = await checkRemote(project, byHash, remote, new Reporter(onProgress), signal, provider);
+      const check = await checkRemote(project, byHash, remote, new Reporter(onProgress), signal, provider, [0, 1]);
       result.skipped = check.present.length;
       for (const h of check.missing) {
         result.errors.push(`missing on remote: ${byHash.get(h).join(', ')} (${h.slice(0, 8)}...)`);
@@ -673,10 +696,10 @@ export async function verify(project, { onProgress, signal, provider, manifests 
   });
 }
 
-async function checkRemote(project, byHash, remote, reporter, signal, providerOverride) {
+async function checkRemote(project, byHash, remote, reporter, signal, providerOverride, slice) {
   const check = { present: [], missing: [], failures: [] };
   const hashes = [...byHash.keys()];
-  reporter.phase('Verifying remote', hashes.length);
+  reporter.phase('Verifying remote', hashes.length, 0, ...slice);
   if (hashes.length === 0) return check;
   const provider = providerOverride || createProvider(project);
   await pool(hashes, parallelism(project), async (h) => {

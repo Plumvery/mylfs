@@ -44,7 +44,7 @@ export function openBrowser(url) {
  * (and tries to open it), waits up to 5 minutes for the redirect to
  * 127.0.0.1, then exchanges the code.
  */
-export async function signIn(clientId, clientSecret, { log = console.error, open = true } = {}) {
+export async function signIn(clientId, clientSecret, { log = console.error, onUrl, open = true, signal } = {}) {
   if (!clientId || !clientSecret) {
     throw new ConfigError('Google OAuth client ID / client secret are not set (driveClientId / driveClientSecret).');
   }
@@ -63,6 +63,14 @@ export async function signIn(clientId, clientSecret, { log = console.error, open
   try {
     const query = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new StorageError('Google sign-in timed out after 5 minutes.')), 5 * 60 * 1000);
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          const e = new Error('Google sign-in was cancelled.');
+          e.name = 'AbortError';
+          reject(e);
+        }, { once: true });
+      }
       server.on('request', (req, res) => {
         const u = new URL(req.url, redirectUri);
         if (!u.pathname.startsWith('/unilfs')) {
@@ -79,6 +87,7 @@ export async function signIn(clientId, clientSecret, { log = console.error, open
       });
       const authUrl = buildAuthUrl(clientId, redirectUri, state, challenge);
       log('Open this URL in a browser to sign in to Google Drive:\n\n  ' + authUrl + '\n');
+      if (onUrl) onUrl(authUrl);
       if (open) openBrowser(authUrl);
     });
 
