@@ -174,4 +174,4 @@ npm test     # node:test、依存なし（フォーマット互換・SigV4 の A
 
 ## ライセンス
 
-MIT © 2026 Plumvery。[UniLFS](https://github.com/Plumvery/UniLFS) と同じライセンスです。
+[MIT](LICENSE) © 2026 Plumvery
