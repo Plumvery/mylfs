@@ -146,7 +146,7 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 マニフェスト・`unilfs.staged.json`・`.gitignore` 管理ブロック・`.git/info/exclude` ブロック・状態キャッシュ・ストレージのキー配置はすべて UniLFS と同一なので、Unity を持っていないメンバー（CI、デザイナー、サーバー）が mylfs で pull / push でき、Unity 側と差分が出ません。Unity モードでは push 時に `.meta` の GUID をマニフェストに記録し、pull 時に消えた `.meta` を復元します。
 
 注意:
-- **Unity エディタが push/pull している最中に mylfs を同じチェックアウトで動かさないでください**（UniLFS のロックはエディタ内だけのもの）。
+- UniLFS 0.6 以降は Unity パッケージ自体が同梱の mylfs で動くため、エディタとターミナルの操作はプロセス間ロックで排他されます。それより古い UniLFS では、エディタが push/pull している最中に mylfs を同じチェックアウトで動かさないでください。
 - `local` プロバイダは mylfs 独自の機能で、Unity パッケージは S3 と Google Drive しか読めません。
 
 ## ライブラリとして使う
