@@ -8,11 +8,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Plumvery/unilfs-cli.git"
+    "url": "git+https://github.com/Plumvery/mylfs.git"
   },
-  "homepage": "https://github.com/Plumvery/unilfs-cli#readme",
+  "homepage": "https://github.com/Plumvery/mylfs#readme",
   "bugs": {
-    "url": "https://github.com/Plumvery/unilfs-cli/issues"
+    "url": "https://github.com/Plumvery/mylfs/issues"
   },
   "type": "module",
   "bin": {

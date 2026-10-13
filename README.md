@@ -34,7 +34,7 @@ your-project/
 ## インストール
 
 ```bash
-npm install -g github:Plumvery/unilfs-cli
+npm install -g github:Plumvery/mylfs
 ```
 
 （clone して `npm link` でも可）
@@ -119,7 +119,7 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 - uses: actions/checkout@v4
 - uses: actions/setup-node@v4
   with: { node-version: 22 }
-- run: npm install -g github:Plumvery/unilfs-cli
+- run: npm install -g github:Plumvery/mylfs
 - run: unilfs pull                 # ビルド前に実ファイルを取得（読み取り専用トークンで可）
   env:
     UNILFS_S3_ACCESS_KEY_ID: ${{ secrets.UNILFS_S3_ACCESS_KEY_ID }}
