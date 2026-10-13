@@ -16,7 +16,7 @@ export class GoogleDriveProvider {
       throw new ConfigError('Google OAuth client ID / client secret are not set (driveClientId / driveClientSecret).');
     }
     if (!refreshToken) {
-      throw new ConfigError(`Not signed in to Google Drive. Run "unilfs login". For CI, set ${ENV.driveRefreshToken}.`);
+      throw new ConfigError(`Not signed in to Google Drive. Run "mylfs login". For CI, set ${ENV.driveRefreshToken}.`);
     }
     if (!folderId || !/^[A-Za-z0-9_-]+$/.test(folderId.trim())) {
       throw new ConfigError('Google Drive folder ID is missing or invalid (driveFolderId). Paste the ID from the folder\'s URL.');
@@ -161,7 +161,7 @@ export class GoogleDriveProvider {
 function notFoundMessage(hash, email) {
   return `Blob ${hash.slice(0, 8)}... was not found in the Google Drive folder${email ? ` (signed in as ${email})` : ''}. `
     + 'Either it was never pushed, the folder ID is wrong, or this Google account cannot see the folder\'s contents - '
-    + `ask the folder owner to share the folder with ${email || 'this account'}, or run "unilfs login" with a different account.`;
+    + `ask the folder owner to share the folder with ${email || 'this account'}, or run "mylfs login" with a different account.`;
 }
 
 function driveError(op, status, body) {
@@ -172,7 +172,7 @@ function driveError(op, status, body) {
   } catch { /* not JSON */ }
   if (message == null) message = body && body.length > 500 ? body.slice(0, 500) + '...' : body;
   let hint = '';
-  if (status === 401) hint = ' Run "unilfs login" again.';
+  if (status === 401) hint = ' Run "mylfs login" again.';
   else if (status === 403) hint = ' Check that the Drive API is enabled for your Google Cloud project and that you have access to the folder (quota/rate limits also report 403).';
   else if (status === 404) hint = ' Check the folder ID and that the signed-in account can access it.';
   return new StorageError(`Google Drive ${op} failed (HTTP ${status}): ${message}.${hint}`);

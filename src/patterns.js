@@ -17,7 +17,7 @@ export const TEMPLATE =
   '# UniLFS: files matching a line below are stored in external storage\n'
   + '# instead of git. Commit this file - it is how the team agrees on what\n'
   + '# counts as a large asset. Editing it tracks nothing on its own; run\n'
-  + '# "unilfs track" (or Window > UniLFS > Track Matching in Unity).\n'
+  + '# "mylfs track" (or Window > UniLFS > Track Matching in Unity).\n'
   + '#\n'
   + '#   *.psd             no slash: matched against the file name, at any depth\n'
   + '#   Assets/Movies/    trailing slash: everything under that folder\n'

@@ -11,7 +11,7 @@ import { BUFFER_SIZE } from '../hasher.js';
  */
 export class LocalProvider {
   constructor({ localPath, projectRoot }) {
-    if (!localPath || !localPath.trim()) throw new ConfigError('Storage folder is not set (localPath). Run "unilfs config set localPath <dir>".');
+    if (!localPath || !localPath.trim()) throw new ConfigError('Storage folder is not set (localPath). Run "mylfs config set localPath <dir>".');
     this.dir = path.resolve(projectRoot || process.cwd(), localPath.trim());
     this.displayName = `local folder (${this.dir})`;
   }

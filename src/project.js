@@ -211,7 +211,7 @@ export function findProject(startDir = process.cwd()) {
     dir = parent;
   }
   const e = new Error('Not inside a UniLFS project (no ' + CONFIG_FILE + ', ' + UNITY_SETTINGS_FILE
-    + ' or ' + MANIFEST_FILE + ' found in this directory or any parent). Run "unilfs init" first.');
+    + ' or ' + MANIFEST_FILE + ' found in this directory or any parent). Run "mylfs init" first.');
   e.code = 'UNILFS_NO_PROJECT';
   throw e;
 }
@@ -230,14 +230,14 @@ export function missingRequirements(project) {
     if (!c.driveClientId) missing.push('a client ID (driveClientId)');
     if (!c.driveClientSecret) missing.push('a client secret (driveClientSecret)');
     if (!s.driveFolderId) missing.push('a folder ID (driveFolderId)');
-    if (!c.driveRefreshToken) missing.push('a signed-in Google account (run "unilfs login")');
+    if (!c.driveRefreshToken) missing.push('a signed-in Google account (run "mylfs login")');
   } else if (s.provider === PROVIDER_LOCAL) {
     if (!s.localPath) missing.push('a storage folder (localPath)');
   } else {
     if (!s.s3Endpoint) missing.push('an endpoint (s3Endpoint)');
     if (!s.s3Bucket) missing.push('a bucket (s3Bucket)');
-    if (!c.s3AccessKeyId) missing.push('an access key ID (run "unilfs login" or set ' + ENV.s3AccessKeyId + ')');
-    if (!c.s3SecretAccessKey) missing.push('a secret access key (run "unilfs login" or set ' + ENV.s3SecretAccessKey + ')');
+    if (!c.s3AccessKeyId) missing.push('an access key ID (run "mylfs login" or set ' + ENV.s3AccessKeyId + ')');
+    if (!c.s3SecretAccessKey) missing.push('a secret access key (run "mylfs login" or set ' + ENV.s3SecretAccessKey + ')');
   }
   return missing;
 }

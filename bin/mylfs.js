@@ -19,9 +19,9 @@ import { formatBytes, isAbort, isDir, norm } from '../src/util.js';
 
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
-const HELP = `unilfs ${VERSION} - large files in your own storage instead of Git LFS
+const HELP = `mylfs ${VERSION} - large files in your own storage instead of Git LFS
 
-Usage: unilfs [--root <dir>] [--quiet] <command> [options]
+Usage: mylfs [--root <dir>] [--quiet] <command> [options]
 
 Setup
   init [options]                 Create the config, unilfs.track and the .gitignore block
@@ -108,7 +108,7 @@ function makeProgress(quiet) {
   return (ev) => {
     if (ev.type === 'phase') {
       clear();
-      if (ev.total > 0) err(`UniLFS [${ev.phase}] ${ev.total} item(s)${ev.totalBytes ? ', ' + formatBytes(ev.totalBytes) : ''}`);
+      if (ev.total > 0) err(`mylfs [${ev.phase}] ${ev.total} item(s)${ev.totalBytes ? ', ' + formatBytes(ev.totalBytes) : ''}`);
     } else if (ev.type === 'done') {
       if (verbosePhases.has(ev.phase)) {
         clear();
@@ -144,12 +144,12 @@ function reportResult(label, r) {
   if (r.untracked) parts.push(`untracked=${r.untracked}`);
   parts.push(`upToDate=${r.skipped}`);
   if (r.errors.length) parts.push(`errors=${r.errors.length}`);
-  out(`UniLFS: ${label} finished. ${parts.join(' ')}`);
+  out(`mylfs: ${label} finished. ${parts.join(' ')}`);
   for (const p of r.missingLocal) err(`  warning: missing locally: ${p}`);
   for (const p of r.keptModified) err(`  warning: locally modified, kept (use --restore-modified to overwrite): ${p}`);
-  for (const p of r.outdated) err(`  warning: local copy is older than the manifest, not pushed (run "unilfs pull"): ${p}`);
+  for (const p of r.outdated) err(`  warning: local copy is older than the manifest, not pushed (run "mylfs pull"): ${p}`);
   for (const p of r.conflicted) err(`  warning: changed locally and in the manifest, left alone: ${p}`);
-  if (r.conflicted.length) err('    resolve with "unilfs pull --restore-modified" (take theirs) or "unilfs keep-mine <path>" then push (keep yours)');
+  if (r.conflicted.length) err('    resolve with "mylfs pull --restore-modified" (take theirs) or "mylfs keep-mine <path>" then push (keep yours)');
   for (const p of r.unattributed) err(`  warning: cannot tell which side is newer (no sync record on this machine), skipped: ${p}`);
   for (const p of r.notIgnored) err(`  warning: staged but not hidden from git (no git checkout found): ${p}`);
   for (const e of r.errors) err(`  error: ${e}`);
@@ -235,12 +235,12 @@ async function cmdInit(opts) {
   if (opts['local-path']) s.localPath = opts['local-path'];
   p.saveSettings(s);
   out(`Wrote ${path.relative(process.cwd(), p.settingsPath) || p.settingsPath}`);
-  if (TrackPatterns.createIfMissing(p.trackPath)) out('Wrote unilfs.track (add patterns such as *.psd, then run "unilfs track")');
+  if (TrackPatterns.createIfMissing(p.trackPath)) out('Wrote unilfs.track (add patterns such as *.psd, then run "mylfs track")');
   updateGitIgnore(p, Manifest.load(p.manifestPath).files.map((f) => f.path));
   out('Updated the UniLFS block in .gitignore');
   const missing = missingRequirements(p);
   if (missing.length) out(`Still needed: ${missing.join(', ')}`);
-  else out('Storage is configured. Try "unilfs test".');
+  else out('Storage is configured. Try "mylfs test".');
   return 0;
 }
 
@@ -254,13 +254,13 @@ async function cmdConfig(project, args) {
     return 0;
   }
   if (action === 'get') {
-    if (!key) throw new Error('usage: unilfs config get <key>');
+    if (!key) throw new Error('usage: mylfs config get <key>');
     const v = project.settings[key];
     out(typeof v === 'string' ? v : JSON.stringify(v));
     return 0;
   }
   if (action === 'set') {
-    if (!key || rest.length === 0) throw new Error('usage: unilfs config set <key> <value>');
+    if (!key || rest.length === 0) throw new Error('usage: mylfs config set <key> <value>');
     if (!SETTING_KEYS.includes(key) && !(key in project.settings)) {
       throw new Error(`Unknown setting "${key}". Known: ${SETTING_KEYS.join(', ')}`);
     }
@@ -274,7 +274,7 @@ async function cmdConfig(project, args) {
     out(`${key} = ${JSON.stringify(s[key])}`);
     return 0;
   }
-  throw new Error('usage: unilfs config [list | get <key> | set <key> <value>]');
+  throw new Error('usage: mylfs config [list | get <key> | set <key> <value>]');
 }
 
 async function cmdLogin(project, opts) {
@@ -330,12 +330,12 @@ async function cmdStatus(project, opts, signal) {
     return 0;
   }
   if (report.files.length === 0) {
-    out('UniLFS: no tracked files.');
+    out('mylfs: no tracked files.');
     return 0;
   }
   const counts = {};
   const width = Math.max(...report.files.map((f) => stateLabel(f).length));
-  out(`UniLFS status (${report.files.length} tracked):`);
+  out(`mylfs status (${report.files.length} tracked):`);
   for (const f of report.files) {
     const label = stateLabel(f);
     counts[label] = (counts[label] || 0) + 1;
@@ -348,10 +348,10 @@ async function cmdStatus(project, opts, signal) {
   for (const f of report.failures) err(`  could not check: ${f}`);
   for (const p of report.notIgnored) err(`  warning: staged but not hidden from git: ${p}`);
   const hints = [];
-  if (counts.staged || counts.modified || counts['not pushed']) hints.push('"unilfs push" uploads staged/modified files');
-  if (counts.missing || counts.outdated) hints.push('"unilfs pull" downloads missing/outdated files');
-  if (counts['not pushed'] && !report.verified) hints.push('"unilfs status --verify" asks storage what it already has');
-  if (counts.conflicted) hints.push('conflicts: "unilfs pull --restore-modified" (theirs) or "unilfs keep-mine <path>" + push (yours)');
+  if (counts.staged || counts.modified || counts['not pushed']) hints.push('"mylfs push" uploads staged/modified files');
+  if (counts.missing || counts.outdated) hints.push('"mylfs pull" downloads missing/outdated files');
+  if (counts['not pushed'] && !report.verified) hints.push('"mylfs status --verify" asks storage what it already has');
+  if (counts.conflicted) hints.push('conflicts: "mylfs pull --restore-modified" (theirs) or "mylfs keep-mine <path>" + push (yours)');
   for (const h of hints) out(`hint: ${h}`);
   return 0;
 }
@@ -371,12 +371,12 @@ async function cmdTrack(project, args, opts, signal) {
     : await core.track(project, expandPaths(project, args), { onProgress: progress, signal });
   finishProgress();
   if (args.length === 0 && TrackPatterns.load(project.trackPath).isEmpty) {
-    err('unilfs.track has no patterns. Add lines such as "*.psd", or pass paths: unilfs track <files...>');
+    err('unilfs.track has no patterns. Add lines such as "*.psd", or pass paths: mylfs track <files...>');
   }
   reportResult('Track', result);
   const hint = core.gitRemoveHint(pathsInGitIndex(project, result.newlyTracked));
   if (hint) out(hint);
-  if (result.trackedNew) out('Run "unilfs push" to upload them and record them in the manifest.');
+  if (result.trackedNew) out('Run "mylfs push" to upload them and record them in the manifest.');
   return result.errors.length ? 1 : 0;
 }
 
@@ -388,7 +388,7 @@ async function runHook(project, name, args, signal) {
     if (name === 'post-checkout' && args[2] === '0') return 0;
     if (Manifest.load(project.manifestPath).files.length === 0) return 0;
     if (missing.length) {
-      err(`UniLFS: not pulling - storage is not configured yet (${missing.join(', ')}).`);
+      err(`mylfs: not pulling - storage is not configured yet (${missing.join(', ')}).`);
       return 0;
     }
     const r = await core.pull(project, { onProgress: makeProgress(quiet), signal });
@@ -400,20 +400,20 @@ async function runHook(project, name, args, signal) {
     const manifests = manifestsBeingPushed(project, await readStdin());
     if (manifests.every((m) => m.files.length === 0)) return 0;
     if (missing.length) {
-      err(`UniLFS: skipping the blob check - storage is not configured (${missing.join(', ')}).`);
+      err(`mylfs: skipping the blob check - storage is not configured (${missing.join(', ')}).`);
       return 0;
     }
     const r = await core.verify(project, { signal, manifests });
     if (r.errors.length) {
       reportResult('Verify', r);
-      err('UniLFS: the manifest names blobs storage does not have. Run "unilfs push" and commit the manifest, then push again.');
+      err('mylfs: the manifest names blobs storage does not have. Run "mylfs push" and commit the manifest, then push again.');
       return 1;
     }
     return 0;
   }
   if (name === 'pre-commit') {
     if (missing.length) {
-      err(`UniLFS: not pushing - storage is not configured (${missing.join(', ')}).`);
+      err(`mylfs: not pushing - storage is not configured (${missing.join(', ')}).`);
       return 0;
     }
     const r = await core.push(project, { requireBaseline: true, onProgress: makeProgress(quiet), signal });
@@ -421,12 +421,12 @@ async function runHook(project, name, args, signal) {
     if (r.uploaded || r.promoted || r.errors.length || r.conflicted.length || r.outdated.length) reportResult('Push', r);
     stageCommittedFiles(project, [project.manifestPath, project.gitignorePath]);
     if (r.errors.length) {
-      err('UniLFS: some files could not be uploaded; the commit was stopped so the manifest does not miss them.');
+      err('mylfs: some files could not be uploaded; the commit was stopped so the manifest does not miss them.');
       return 1;
     }
     return 0;
   }
-  err(`UniLFS: unknown hook "${name}".`);
+  err(`mylfs: unknown hook "${name}".`);
   return 0;
 }
 
@@ -447,7 +447,7 @@ async function main(argv) {
   process.on('SIGINT', () => {
     interrupted++;
     if (interrupted > 1) process.exit(130);
-    err('\nUniLFS: cancelling (finishing the files already done; press Ctrl+C again to force)...');
+    err('\nmylfs: cancelling (finishing the files already done; press Ctrl+C again to force)...');
     controller.abort();
   });
   const signal = controller.signal;
@@ -476,15 +476,15 @@ async function main(argv) {
     case 'track':
       return cmdTrack(project, args, opts, signal);
     case 'untrack': {
-      if (!args.length) throw new Error('usage: unilfs untrack <paths...>');
+      if (!args.length) throw new Error('usage: mylfs untrack <paths...>');
       const r = await core.untrack(project, expandPaths(project, args));
       reportResult('Untrack', r);
       return r.errors.length ? 1 : 0;
     }
     case 'keep-mine': {
-      if (!args.length) throw new Error('usage: unilfs keep-mine <paths...>');
+      if (!args.length) throw new Error('usage: mylfs keep-mine <paths...>');
       const r = await core.keepLocal(project, args.map((a) => path.resolve(process.cwd(), a)));
-      for (const p of r.conflicted) out(`keep mine: ${p} (uploaded by the next "unilfs push")`);
+      for (const p of r.conflicted) out(`keep mine: ${p} (uploaded by the next "mylfs push")`);
       for (const e of r.errors) err(`  error: ${e}`);
       return r.errors.length ? 1 : 0;
     }
@@ -507,7 +507,7 @@ async function main(argv) {
       finishProgress();
       reportResult('Verify', r);
       if (r.errors.length) {
-        err('UniLFS Verify failed: the manifest names content storage does not have - most likely a merge or hand-edit'
+        err('mylfs Verify failed: the manifest names content storage does not have - most likely a merge or hand-edit'
           + ' that kept an entry nobody pushed, or a blob deleted from the bucket.');
       }
       return r.errors.length ? 1 : 0;
@@ -520,18 +520,18 @@ async function main(argv) {
       }
       if (action === 'uninstall') {
         const removed = uninstallHooks(project);
-        for (const f of removed) out(`removed UniLFS from ${f}`);
-        if (!removed.length) out('No UniLFS hooks were installed.');
+        for (const f of removed) out(`removed mylfs from ${f}`);
+        if (!removed.length) out('No mylfs hooks were installed.');
         return 0;
       }
       const names = installedHooks(project);
-      out(names.length ? `UniLFS hooks installed: ${names.join(', ')}` : 'No UniLFS hooks installed. Run "unilfs hooks install".');
+      out(names.length ? `mylfs hooks installed: ${names.join(', ')}` : 'No mylfs hooks installed. Run "mylfs hooks install".');
       return 0;
     }
     case 'hook':
       return runHook(project, args[0], args.slice(1), signal);
     default:
-      err(`Unknown command "${command}". Run "unilfs help".`);
+      err(`Unknown command "${command}". Run "mylfs help".`);
       return 2;
   }
 }
@@ -554,10 +554,10 @@ if (isMain) {
     (e) => {
       finishProgress();
       if (isAbort(e)) {
-        err('UniLFS: cancelled.');
+        err('mylfs: cancelled.');
         process.exitCode = 130;
       } else {
-        err(`UniLFS: ${e && e.message ? e.message : e}`);
+        err(`mylfs: ${e && e.message ? e.message : e}`);
         if (process.env.UNILFS_DEBUG) err(e && e.stack);
         process.exitCode = 1;
       }

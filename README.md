@@ -1,11 +1,11 @@
-# unilfs-cli
+# mylfs
 
 **Git LFS の代わりに、大きなファイルを自分のストレージ（Cloudflare R2 / S3 互換 / Google Drive / ローカルフォルダ）に置く CLI。**
 
 [UniLFS](https://github.com/Plumvery/UniLFS)（Unity エディタ拡張）の仕組みを Node.js に移植し、Unity 以外のどんな git プロジェクトでも使えるようにしたものです。依存パッケージはゼロ、Node.js 18 以上で動きます。
 
 - git には小さな `unilfs.manifest.json`（パス + SHA-256 + サイズ）だけが入り、実ファイルは gitignore されて外部ストレージへ
-- **UniLFS とファイル形式が完全互換** — Unity プロジェクトでは Unity パッケージと CLI を同じチェックアウトで併用できる
+- **UniLFS とファイル形式が完全互換** — Unity プロジェクトでは Unity パッケージと mylfs を同じチェックアウトで併用できる
 - Unity の Auto Pull / Auto Push の代わりに **git フック**で自動同期
 
 ## 仕組み
@@ -25,6 +25,8 @@ your-project/
 ストレージ:  <prefix>/objects/ab/abcdef1234...   ← SHA-256 名のブロブ（重複排除）
 ```
 
+> ファイル名（`unilfs.*`、`.unilfs/`）・環境変数（`UNILFS_*`）・`.gitignore` のマーカーは UniLFS と共通のままにしています。これを変えると Unity パッケージとの互換性が失われるためです。
+
 1. **track** — ファイルを「ステージ」し、`.git/info/exclude` で即座に git から隠す。マニフェストはまだ書かない
 2. **push** — ストレージに無いブロブをアップロードし、**アップロードが確認できてから**マニフェストに記録。コミットされたマニフェストが存在しないブロブを指すことは起きない
 3. **pull** — マニフェストにあってローカルに無い／古いファイルをダウンロードし、ハッシュ検証してから配置
@@ -43,9 +45,9 @@ npm install -g github:Plumvery/mylfs
 
 ```bash
 cd your-project
-unilfs init --provider s3 --endpoint https://<account-id>.r2.cloudflarestorage.com --bucket my-bucket
-unilfs login          # Access Key ID / Secret を入力（.unilfs/credentials.json に保存、git には入らない）
-unilfs test           # 接続確認
+mylfs init --provider s3 --endpoint https://<account-id>.r2.cloudflarestorage.com --bucket my-bucket
+mylfs login          # Access Key ID / Secret を入力（.unilfs/credentials.json に保存、git には入らない）
+mylfs test           # 接続確認
 ```
 
 `unilfs.track` にパターンを書いて track → push：
@@ -58,24 +60,24 @@ assets/movies/
 ```
 
 ```bash
-unilfs track          # 引数なし = unilfs.track に一致する全ファイル。ファイル/フォルダを直接指定も可
-unilfs push
+mylfs track          # 引数なし = unilfs.track に一致する全ファイル。ファイル/フォルダを直接指定も可
+mylfs push
 git add unilfs.manifest.json unilfs.track unilfs.config.json .gitignore
 git commit -m "Move large assets to R2"
-unilfs hooks install  # checkout / merge 後に自動 pull、push 前にブロブの存在を検証
+mylfs hooks install  # checkout / merge 後に自動 pull、push 前にブロブの存在を検証
 ```
 
-チームメイトは clone → `unilfs login` → `unilfs pull`（フックを入れておけば以降の `git pull` / ブランチ切替で自動）。
+チームメイトは clone → `mylfs login` → `mylfs pull`（フックを入れておけば以降の `git pull` / ブランチ切替で自動）。
 
 ### 他のストレージ
 
 ```bash
 # Google Drive（OAuth の「デスクトップアプリ」クライアントを用意）
-unilfs init --provider googledrive --client-id <id> --client-secret <secret> --folder-id <folder-id>
-unilfs login          # ブラウザで Google にサインイン。folder-id 未設定ならフォルダ作成も提案
+mylfs init --provider googledrive --client-id <id> --client-secret <secret> --folder-id <folder-id>
+mylfs login          # ブラウザで Google にサインイン。folder-id 未設定ならフォルダ作成も提案
 
 # ローカル / NAS / 同期フォルダ
-unilfs init --provider local --local-path //nas/share/unilfs
+mylfs init --provider local --local-path //nas/share/unilfs
 ```
 
 Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md](https://github.com/Plumvery/UniLFS/blob/main/Documentation~/setup-google-drive.md)、R2 のトークン作成は [setup-r2.md](https://github.com/Plumvery/UniLFS/blob/main/Documentation~/setup-r2.md) を参照。
@@ -84,18 +86,18 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 
 | コマンド | 内容 |
 |---|---|
-| `unilfs init [--provider ...]` | 設定ファイル・`unilfs.track` テンプレート・`.gitignore` ブロックを作成 |
-| `unilfs config [list \| get <key> \| set <key> <value>]` | 設定の表示・変更 |
-| `unilfs login` / `logout` | このマシンの認証情報を保存 / 消去 |
-| `unilfs test` | ストレージ接続テスト |
-| `unilfs track [paths...]` | ステージ（引数なしで `unilfs.track` に一致する全ファイル） |
-| `unilfs untrack <paths...>` | 追跡解除（ファイルは残る） |
-| `unilfs push [--require-baseline]` | 新規/変更ファイルをアップロードしてマニフェストに記録 |
-| `unilfs pull [--restore-modified]` | 不足/古いファイルをダウンロード（`--restore-modified` でローカル変更も上書き） |
-| `unilfs status [--verify] [--json]` | 全追跡ファイルの状態（`--verify` でストレージにも問い合わせ） |
-| `unilfs verify` | マニフェストが指すブロブがストレージに無ければ失敗（CI 用） |
-| `unilfs keep-mine <paths...>` | 競合を「自分の版」で解決（次の push でアップロード） |
-| `unilfs hooks install [--pre-commit]` / `uninstall` / `status` | git フックの管理 |
+| `mylfs init [--provider ...]` | 設定ファイル・`unilfs.track` テンプレート・`.gitignore` ブロックを作成 |
+| `mylfs config [list \| get <key> \| set <key> <value>]` | 設定の表示・変更 |
+| `mylfs login` / `logout` | このマシンの認証情報を保存 / 消去 |
+| `mylfs test` | ストレージ接続テスト |
+| `mylfs track [paths...]` | ステージ（引数なしで `unilfs.track` に一致する全ファイル） |
+| `mylfs untrack <paths...>` | 追跡解除（ファイルは残る） |
+| `mylfs push [--require-baseline]` | 新規/変更ファイルをアップロードしてマニフェストに記録 |
+| `mylfs pull [--restore-modified]` | 不足/古いファイルをダウンロード（`--restore-modified` でローカル変更も上書き） |
+| `mylfs status [--verify] [--json]` | 全追跡ファイルの状態（`--verify` でストレージにも問い合わせ） |
+| `mylfs verify` | マニフェストが指すブロブがストレージに無ければ失敗（CI 用） |
+| `mylfs keep-mine <paths...>` | 競合を「自分の版」で解決（次の push でアップロード） |
+| `mylfs hooks install [--pre-commit]` / `uninstall` / `status` | git フックの管理 |
 
 共通オプション: `--root <dir>`（プロジェクトルートを明示）、`--quiet`。Ctrl+C で中断すると、完了済みのファイルはマニフェストに記録してから終了します。
 
@@ -103,7 +105,7 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 
 ## git フック（Unity の Auto Sync の代わり）
 
-`unilfs hooks install` で以下を入れます（既存のフックは壊さず、マーカー付きブロックを追記）。`core.hooksPath`（husky 等）も尊重します。
+`mylfs hooks install` で以下を入れます（既存のフックは壊さず、マーカー付きブロックを追記）。`core.hooksPath`（husky 等）も尊重します。
 
 | フック | 動作 |
 |---|---|
@@ -120,13 +122,13 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 - uses: actions/setup-node@v4
   with: { node-version: 22 }
 - run: npm install -g github:Plumvery/mylfs
-- run: unilfs pull                 # ビルド前に実ファイルを取得（読み取り専用トークンで可）
+- run: mylfs pull                 # ビルド前に実ファイルを取得（読み取り専用トークンで可）
   env:
     UNILFS_S3_ACCESS_KEY_ID: ${{ secrets.UNILFS_S3_ACCESS_KEY_ID }}
     UNILFS_S3_SECRET_ACCESS_KEY: ${{ secrets.UNILFS_S3_SECRET_ACCESS_KEY }}
 ```
 
-`unilfs verify` はローカルファイル不要で、マニフェストに存在しないブロブがあれば非ゼロ終了します（PR のゲートに）。
+`mylfs verify` はローカルファイル不要で、マニフェストに存在しないブロブがあれば非ゼロ終了します（PR のゲートに）。
 
 環境変数（ファイルより優先）: `UNILFS_S3_ACCESS_KEY_ID`, `UNILFS_S3_SECRET_ACCESS_KEY`, `UNILFS_DRIVE_CLIENT_ID`, `UNILFS_DRIVE_CLIENT_SECRET`, `UNILFS_DRIVE_REFRESH_TOKEN`, `UNILFS_PULL_RESTORE_MODIFIED=1`
 
@@ -141,16 +143,16 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 | キャッシュ | `.unilfs/cache/` | `Library/UniLFS/`（エディタと共有） |
 | 追跡不可 | `.git/`, `.unilfs/`, `excludeDirs`（既定 `node_modules`） | `.meta`, `Library/`, `Temp/`, `Logs/`, `obj/`, `UserSettings/`, `.git/` |
 
-マニフェスト・`unilfs.staged.json`・`.gitignore` 管理ブロック・`.git/info/exclude` ブロック・状態キャッシュ・ストレージのキー配置はすべて UniLFS と同一なので、Unity を持っていないメンバー（CI、デザイナー、サーバー）が CLI で pull / push でき、Unity 側と差分が出ません。Unity モードでは push 時に `.meta` の GUID をマニフェストに記録し、pull 時に消えた `.meta` を復元します。
+マニフェスト・`unilfs.staged.json`・`.gitignore` 管理ブロック・`.git/info/exclude` ブロック・状態キャッシュ・ストレージのキー配置はすべて UniLFS と同一なので、Unity を持っていないメンバー（CI、デザイナー、サーバー）が mylfs で pull / push でき、Unity 側と差分が出ません。Unity モードでは push 時に `.meta` の GUID をマニフェストに記録し、pull 時に消えた `.meta` を復元します。
 
 注意:
-- **Unity エディタが push/pull している最中に CLI を同じチェックアウトで動かさないでください**（UniLFS のロックはエディタ内だけのもの）。
-- `local` プロバイダは CLI 独自の機能で、Unity パッケージは S3 と Google Drive しか読めません。
+- **Unity エディタが push/pull している最中に mylfs を同じチェックアウトで動かさないでください**（UniLFS のロックはエディタ内だけのもの）。
+- `local` プロバイダは mylfs 独自の機能で、Unity パッケージは S3 と Google Drive しか読めません。
 
 ## ライブラリとして使う
 
 ```js
-import { findProject, track, push, pull, status } from 'unilfs-cli';
+import { findProject, track, push, pull, status } from 'mylfs';
 
 const project = findProject(process.cwd());
 await track(project, ['art/hero.psd']);

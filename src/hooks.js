@@ -21,7 +21,7 @@ export const HOOK_END = '# <<< UniLFS hook <<<';
 export const DEFAULT_HOOKS = ['post-checkout', 'post-merge', 'pre-push'];
 export const OPTIONAL_HOOKS = ['pre-commit'];
 
-const CLI_PATH = norm(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'unilfs.js'));
+const CLI_PATH = norm(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'mylfs.js'));
 
 export function hooksDir(project) {
   const git = findGit(project.root);

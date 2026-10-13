@@ -123,7 +123,7 @@ async function exchange(form, fallbackRefreshToken, signal) {
   if (r.status < 200 || r.status >= 300 || !parsed || !parsed.access_token) {
     const detail = parsed ? `${parsed.error || ''} ${parsed.error_description || ''}`.trim() : text;
     const hint = parsed && parsed.error === 'invalid_grant'
-      ? ' The refresh token may be expired or revoked - run "unilfs login" again.'
+      ? ' The refresh token may be expired or revoked - run "mylfs login" again.'
         + " (While an OAuth consent screen is in 'Testing' status, refresh tokens expire after 7 days.)"
       : '';
     throw new StorageError(`Google token request failed (HTTP ${r.status}): ${detail}.${hint}`);

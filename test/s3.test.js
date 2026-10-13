@@ -85,5 +85,5 @@ test('S3 provider: HEAD/PUT/GET with path-style keys, fixed length, verified dow
 test('S3 provider rejects incomplete configuration with a usable message', () => {
   assert.throws(() => new S3Provider({ endpoint: '', bucket: 'b', accessKeyId: 'a', secretAccessKey: 'b' }), /s3Endpoint/);
   assert.throws(() => new S3Provider({ endpoint: 'ftp://x', bucket: 'b', accessKeyId: 'a', secretAccessKey: 'b' }), /valid http/);
-  assert.throws(() => new S3Provider({ endpoint: 'https://x', bucket: 'b' }), /unilfs login/);
+  assert.throws(() => new S3Provider({ endpoint: 'https://x', bucket: 'b' }), /mylfs login/);
 });

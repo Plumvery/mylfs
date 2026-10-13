@@ -10,7 +10,7 @@ import { ENV } from '../project.js';
  */
 export class S3Provider {
   constructor({ endpoint, bucket, region, prefix, accessKeyId, secretAccessKey }) {
-    if (!endpoint || !endpoint.trim()) throw new ConfigError('S3 endpoint is not set (s3Endpoint). Run "unilfs config set s3Endpoint <url>".');
+    if (!endpoint || !endpoint.trim()) throw new ConfigError('S3 endpoint is not set (s3Endpoint). Run "mylfs config set s3Endpoint <url>".');
     let parsed;
     try {
       parsed = new URL(endpoint.trim());
@@ -20,9 +20,9 @@ export class S3Provider {
     if (!parsed || (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')) {
       throw new ConfigError('S3 endpoint is not a valid http(s) URL: ' + endpoint);
     }
-    if (!bucket || !bucket.trim()) throw new ConfigError('S3 bucket is not set (s3Bucket). Run "unilfs config set s3Bucket <name>".');
+    if (!bucket || !bucket.trim()) throw new ConfigError('S3 bucket is not set (s3Bucket). Run "mylfs config set s3Bucket <name>".');
     if (!accessKeyId || !secretAccessKey) {
-      throw new ConfigError(`S3 credentials are not set. Run "unilfs login" (stored per-user, never committed), or set ${ENV.s3AccessKeyId} / ${ENV.s3SecretAccessKey}.`);
+      throw new ConfigError(`S3 credentials are not set. Run "mylfs login" (stored per-user, never committed), or set ${ENV.s3AccessKeyId} / ${ENV.s3SecretAccessKey}.`);
     }
     this.host = parsed.host;
     this.base = `${parsed.protocol}//${parsed.host}`;
