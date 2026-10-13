@@ -1,0 +1,47 @@
+{
+  "name": "unilfs-cli",
+  "version": "0.1.0",
+  "description": "Store large files in your own storage (Cloudflare R2 / S3-compatible / Google Drive / a local folder) instead of Git LFS. A Node.js port of UniLFS that works with any git project, and stays file-compatible with the Unity package.",
+  "author": {
+    "name": "Plumvery",
+    "url": "https://github.com/Plumvery"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Plumvery/unilfs-cli.git"
+  },
+  "homepage": "https://github.com/Plumvery/unilfs-cli#readme",
+  "bugs": {
+    "url": "https://github.com/Plumvery/unilfs-cli/issues"
+  },
+  "type": "module",
+  "bin": {
+    "unilfs": "bin/unilfs.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "keywords": [
+    "git",
+    "lfs",
+    "large-files",
+    "r2",
+    "s3",
+    "google-drive",
+    "unilfs"
+  ],
+  "license": "MIT"
+}
