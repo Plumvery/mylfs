@@ -29,7 +29,7 @@ your-project/
 
 1. **track** — ファイルを「ステージ」し、`.git/info/exclude` で即座に git から隠す。マニフェストはまだ書かない
 2. **push** — ストレージに無いブロブをアップロードし、**アップロードが確認できてから**マニフェストに記録。コミットされたマニフェストが存在しないブロブを指すことは起きない
-3. **pull** — マニフェストにあってローカルに無い／古いファイルをダウンロードし、ハッシュ検証してから配置
+3. **pull** — マニフェストにあってローカルに無い／古いファイルをダウンロードし、ハッシュ検証してから配置。同じリポジトリの別の `git worktree` が既に持っているファイルは、ネットワークを使わずそこからコピーする（後述）
 
 「自分が編集した（modified）」と「他人が新しい版を push した（outdated）」は、このマシンが最後に同期したハッシュ（ベースライン）と比べる三者比較で区別します。両方動いた場合は **conflicted** となり、勝手にどちらかで上書きはしません。
 
@@ -93,7 +93,7 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 | `mylfs track [paths...]` | ステージ（引数なしで `unilfs.track` に一致する全ファイル） |
 | `mylfs untrack <paths...>` | 追跡解除（ファイルは残る） |
 | `mylfs push [--require-baseline]` | 新規/変更ファイルをアップロードしてマニフェストに記録 |
-| `mylfs pull [--restore-modified]` | 不足/古いファイルをダウンロード（`--restore-modified` でローカル変更も上書き） |
+| `mylfs pull [--restore-modified] [--no-worktrees]` | 不足/古いファイルをダウンロード（`--restore-modified` でローカル変更も上書き、`--no-worktrees` で他の worktree からのコピーをせず必ずストレージから） |
 | `mylfs status [--verify] [--json]` | 全追跡ファイルの状態（`--verify` でストレージにも問い合わせ） |
 | `mylfs verify` | マニフェストが指すブロブがストレージに無ければ失敗（CI 用） |
 | `mylfs keep-mine <paths...>` | 競合を「自分の版」で解決（次の push でアップロード） |
@@ -115,7 +115,14 @@ Google Drive クライアントの作り方は UniLFS の [setup-google-drive.md
 
 `pre-commit` の注意: 変更が gitignore 済みの大きいファイル**だけ**の場合、git は「コミットするものが無い」と判断して止まります（フックがマニフェストをステージ済みなので、もう一度 `git commit` すれば通ります）。
 
-## CI
+## git worktree
+
+`git worktree add` で作ったチェックアウトでは、pull が**同じリポジトリの他の worktree（メインのチェックアウトを含む）にあるファイルをコピー**して、ストレージからのダウンロードを省きます。
+
+- 候補は `git worktree list` の各チェックアウトの状態キャッシュ（ハッシュ → パス）と、同じパスのファイル
+- コピーしながら SHA-256 を検証し、一致しなければ（あちらで編集中など）次の候補、最後はストレージへ。他の worktree のファイルは読むだけで変更しない
+- フックを入れていれば `git worktree add` の post-checkout でそのまま実行される。新しい worktree にまだ認証情報が無くても、他の worktree にあるファイルはコピーされる（無いものだけスキップ）
+
 
 ```yaml
 - uses: actions/checkout@v4
